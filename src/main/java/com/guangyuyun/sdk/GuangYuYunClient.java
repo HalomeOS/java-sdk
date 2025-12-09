@@ -21,6 +21,7 @@ import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.entity.mime.content.InputStreamBody;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
@@ -219,15 +220,33 @@ public class GuangYuYunClient {
             httpPost.setHeader("AuthToken", request.getAuthToken());
             
             // 创建multipart/form-data请求体
-            // 使用InputStreamBody，从文件创建输入流
-            FileInputStream fileInputStream = new FileInputStream(request.getFile());
-            InputStreamBody inputStreamBody = new InputStreamBody(
-                fileInputStream,
-                ContentType.DEFAULT_BINARY,
-                request.getFile().getName()
-            );
+            // SDK自动判断使用FileBody还是InputStreamBody
+            // 优先使用FileBody（性能更好），如果文件不可读或需要流式处理则使用InputStreamBody
             MultipartEntityBuilder builder = MultipartEntityBuilder.create();
-            builder.addPart("file", inputStreamBody);
+            
+            boolean useFileBody = shouldUseFileBody(request.getFile());
+            
+            if (useFileBody) {
+                // 使用FileBody方式（推荐，性能更好，直接使用文件）
+                FileBody fileBody = new FileBody(
+                    request.getFile(),
+                    ContentType.DEFAULT_BINARY,
+                    request.getFile().getName()
+                );
+                builder.addPart("file", fileBody);
+                logger.debug("Auto-selected: Using FileBody with file: {}", request.getFile().getName());
+            } else {
+                // 使用InputStreamBody方式（从文件创建输入流）
+                FileInputStream fileInputStream = new FileInputStream(request.getFile());
+                InputStreamBody inputStreamBody = new InputStreamBody(
+                    fileInputStream,
+                    ContentType.DEFAULT_BINARY,
+                    request.getFile().getName()
+                );
+                builder.addPart("file", inputStreamBody);
+                logger.debug("Auto-selected: Using InputStreamBody with file: {}", request.getFile().getName());
+            }
+            
             // MultipartEntityBuilder会自动设置Content-Type: multipart/form-data; boundary=...
             HttpEntity multipartEntity = builder.build();
             httpPost.setEntity(multipartEntity);
@@ -844,6 +863,43 @@ public class GuangYuYunClient {
         if (request.getFileData() == null || request.getFileData().length == 0) {
             throw new GuangYuYunException("FileData cannot be null or empty");
         }
+    }
+    
+    /**
+     * 判断是否应该使用FileBody方式
+     * SDK自动判断逻辑：
+     * - 文件可读且不是符号链接时，优先使用FileBody（性能更好）
+     * - 其他情况使用InputStreamBody
+     * 
+     * @param file 文件对象
+     * @return true=使用FileBody, false=使用InputStreamBody
+     */
+    private boolean shouldUseFileBody(File file) {
+        try {
+            // 优先使用FileBody的条件：
+            // 1. 文件可读
+            // 2. 文件不是符号链接（避免潜在问题）
+            // 3. 文件大小合理（小于50MB时优先使用FileBody）
+            if (file.canRead()) {
+                // 检查是否是符号链接
+                String canonicalPath = file.getCanonicalPath();
+                String absolutePath = file.getAbsolutePath();
+                boolean isSymbolicLink = !canonicalPath.equals(absolutePath);
+                
+                // 小文件优先使用FileBody，大文件使用InputStreamBody（避免内存问题）
+                long fileSize = file.length();
+                long threshold = 50 * 1024 * 1024; // 50MB阈值
+                
+                if (!isSymbolicLink && fileSize < threshold) {
+                    return true; // 使用FileBody
+                }
+            }
+        } catch (IOException e) {
+            logger.debug("Error checking file properties, will use InputStreamBody: {}", e.getMessage());
+        }
+        
+        // 默认使用InputStreamBody（更安全，兼容性更好）
+        return false;
     }
     
     /**
