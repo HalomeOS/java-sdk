@@ -6,6 +6,8 @@ import com.guangyuyun.sdk.model.FileDownloadRequest;
 import com.guangyuyun.sdk.model.FileDownloadResponse;
 import com.guangyuyun.sdk.model.LargeFileUploadRequest;
 import com.guangyuyun.sdk.model.LargeFileUploadResponse;
+import com.guangyuyun.sdk.model.SmallFileUploadRequest;
+import com.guangyuyun.sdk.model.SmallFileUploadResponse;
 import com.guangyuyun.sdk.model.TokenRequest;
 import com.guangyuyun.sdk.model.TokenResponse;
 import com.guangyuyun.sdk.util.DownloadUtils;
@@ -18,6 +20,8 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
@@ -37,6 +41,7 @@ public class GuangYuYunClient {
     private static final String DEFAULT_BASE_URL = "https://gw.halome.cc";
     private static final String CREATE_TOKEN_ENDPOINT = "/u/createToken";//创建Token
     private static final String LARGE_FILE_UPLOAD_ENDPOINT = "/v1/addLargeFile";//大文件上传
+    private static final String SMALL_FILE_UPLOAD_ENDPOINT = "/v1/add";//小文件上传
     private static final String FILE_DOWNLOAD_ENDPOINT = "/v1/cat";//下载
     
     private final String baseUrl;
@@ -157,6 +162,117 @@ public class GuangYuYunClient {
     }
     
     
+     /**
+     * 上传小文件
+     * 
+     * @param file 要上传的文件
+     * @param authToken 认证令牌
+     * @return 上传结果
+     * @throws GuangYuYunException 当请求失败时抛出异常
+     */
+    public SmallFileUploadResponse uploadSmallFile(File file, String authToken) throws GuangYuYunException {
+        SmallFileUploadRequest request = new SmallFileUploadRequest(file, authToken);
+        return uploadSmallFile(request);
+    }
+    
+    /**
+     * 上传小文件（使用统一token）
+     * 
+     * @param file 要上传的文件
+     * @return 上传结果
+     * @throws GuangYuYunException 当请求失败时抛出异常
+     */
+    public SmallFileUploadResponse uploadSmallFile(File file) throws GuangYuYunException {
+        if (!hasAuthToken()) {
+            throw new GuangYuYunException("AuthToken not set. Please call setAuthToken() first or use uploadSmallFile(file, authToken)");
+        }
+        return uploadSmallFile(file, this.authToken);
+    }
+    
+    /**
+     * 上传小文件
+     * 
+     * @param request 小文件上传请求参数
+     * @return 上传结果
+     * @throws GuangYuYunException 当请求失败时抛出异常
+     */
+    public SmallFileUploadResponse uploadSmallFile(SmallFileUploadRequest request) throws GuangYuYunException {
+        validateSmallFileUploadRequest(request);
+        
+        try {
+            String url = baseUrl + SMALL_FILE_UPLOAD_ENDPOINT;
+            
+            logger.debug("Uploading small file to: {}", url);
+            logger.debug("Request: {}", request);
+            
+            // 检查文件大小（不能超过100MB）
+            long fileSize = request.getFile().length();
+            long maxSize = 100 * 1024 * 1024; // 100MB
+            if (fileSize > maxSize) {
+                throw new GuangYuYunException("File size exceeds 100MB. Please use large file upload interface for files larger than 100MB");
+            }
+            
+            HttpPost httpPost = new HttpPost(url);
+            
+            // 设置请求头
+            httpPost.setHeader("AuthToken", request.getAuthToken());
+            
+            // 创建multipart/form-data请求体
+            FileBody fileBody = new FileBody(request.getFile(), ContentType.DEFAULT_BINARY);
+            MultipartEntityBuilder builder = MultipartEntityBuilder.create();
+            builder.addPart("file", fileBody);
+            HttpEntity multipartEntity = builder.build();
+            httpPost.setEntity(multipartEntity);
+            
+            HttpResponse response = httpClient.execute(httpPost);
+            HttpEntity entity = response.getEntity();
+            
+            if (entity != null) {
+                String responseBody = EntityUtils.toString(entity, StandardCharsets.UTF_8);
+                logger.debug("Response body: {}", responseBody);
+                
+                SmallFileUploadResponse uploadResponse = objectMapper.readValue(responseBody, SmallFileUploadResponse.class);
+                
+                if (!uploadResponse.isSuccess()) {
+                    String errorMessage = getErrorMessage(uploadResponse.getCode(), uploadResponse.getMessage());
+                    throw new GuangYuYunException(uploadResponse.getCode(), 
+                        "Failed to upload file: " + errorMessage, uploadResponse.getCode());
+                }
+                
+                return uploadResponse;
+            } else {
+                throw new GuangYuYunException("Empty response from server");
+            }
+            
+        } catch (IOException e) {
+            logger.error("Error uploading small file", e);
+            throw new GuangYuYunException("Network error: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 根据错误码获取错误消息
+     */
+    private String getErrorMessage(Integer code, String defaultMessage) {
+        if (code == null) {
+            return defaultMessage != null ? defaultMessage : "Unknown error";
+        }
+        
+        switch (code) {
+            case 4:
+                return "不支持多文件上传";
+            case 5:
+                return "单文件大小不能超过100M,大文件上传请调用大文件上传接口";
+            case 6:
+                return "文件错误";
+            case 7:
+                return "添加到分布式存储系统错误";
+            case 8:
+                return "写入数据库错误";
+            default:
+                return defaultMessage != null ? defaultMessage : "Unknown error code: " + code;
+        }
+    }
     
     
     
@@ -719,6 +835,31 @@ public class GuangYuYunClient {
         
         if (request.getFileData() == null || request.getFileData().length == 0) {
             throw new GuangYuYunException("FileData cannot be null or empty");
+        }
+    }
+    
+    /**
+     * 验证小文件上传请求参数
+     */
+    private void validateSmallFileUploadRequest(SmallFileUploadRequest request) throws GuangYuYunException {
+        if (request == null) {
+            throw new GuangYuYunException("Request cannot be null");
+        }
+        
+        if (request.getFile() == null) {
+            throw new GuangYuYunException("File cannot be null");
+        }
+        
+        if (!request.getFile().exists()) {
+            throw new GuangYuYunException("File does not exist: " + request.getFile().getPath());
+        }
+        
+        if (request.getFile().isDirectory()) {
+            throw new GuangYuYunException("File cannot be a directory");
+        }
+        
+        if (request.getAuthToken() == null || request.getAuthToken().trim().isEmpty()) {
+            throw new GuangYuYunException("AuthToken cannot be null or empty");
         }
     }
     

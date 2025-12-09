@@ -27,6 +27,13 @@
             <version>4.5.13</version>
         </dependency>
         
+        <!-- HTTP MIME Support (for multipart/form-data) -->
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpmime</artifactId>
+            <version>4.5.13</version>
+        </dependency>
+        
         <!-- JSON Processing -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
