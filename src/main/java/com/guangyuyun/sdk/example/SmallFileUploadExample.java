@@ -27,7 +27,7 @@ public class SmallFileUploadExample {
         
         try {
             // 指定要上传的文件路径
-            String filePath = "test_small_file.txt"; // 请修改为实际的文件路径
+            String filePath = "E:\\新建 DOCX 文档 (2).docx"; // 请修改为实际的文件路径
             
             // 如果文件不存在，创建一个测试文件
             File file = new File(filePath);
@@ -46,7 +46,7 @@ public class SmallFileUploadExample {
             System.out.println("准备上传文件: " + file.getAbsolutePath());
             System.out.println("文件大小: " + file.length() + " bytes (" + formatFileSize(file.length()) + ")");
             
-            String authToken = "93d692153446347792d62113209288bf"; // 请修改为实际的token
+            String authToken = "911607e14ebab06979c3a90f90a9efc8"; // 请修改为实际的token
             
             SmallFileUploadResponse response = client.uploadSmallFile(file, authToken);
             System.out.println("返回值: " + response);

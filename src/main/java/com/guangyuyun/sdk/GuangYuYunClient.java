@@ -21,13 +21,14 @@ import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
-import org.apache.http.entity.mime.content.FileBody;
+import org.apache.http.entity.mime.content.InputStreamBody;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
@@ -218,9 +219,16 @@ public class GuangYuYunClient {
             httpPost.setHeader("AuthToken", request.getAuthToken());
             
             // 创建multipart/form-data请求体
-            FileBody fileBody = new FileBody(request.getFile(), ContentType.DEFAULT_BINARY);
+            // 使用InputStreamBody，从文件创建输入流
+            FileInputStream fileInputStream = new FileInputStream(request.getFile());
+            InputStreamBody inputStreamBody = new InputStreamBody(
+                fileInputStream,
+                ContentType.DEFAULT_BINARY,
+                request.getFile().getName()
+            );
             MultipartEntityBuilder builder = MultipartEntityBuilder.create();
-            builder.addPart("file", fileBody);
+            builder.addPart("file", inputStreamBody);
+            // MultipartEntityBuilder会自动设置Content-Type: multipart/form-data; boundary=...
             HttpEntity multipartEntity = builder.build();
             httpPost.setEntity(multipartEntity);
             
