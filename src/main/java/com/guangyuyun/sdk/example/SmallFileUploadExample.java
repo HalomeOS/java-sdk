@@ -46,7 +46,7 @@ public class SmallFileUploadExample {
             System.out.println("准备上传文件: " + file.getAbsolutePath());
             System.out.println("文件大小: " + file.length() + " bytes (" + formatFileSize(file.length()) + ")");
             
-            String authToken = "ef85049aeb87fdb5b27f1b6fd75e632c"; // 请修改为实际的token
+            String authToken = "93d692153446347792d62113209288bf"; // 请修改为实际的token
             
             SmallFileUploadResponse response = client.uploadSmallFile(file, authToken);
             System.out.println("返回值: " + response);

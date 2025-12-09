@@ -23,8 +23,8 @@ public class TokenExample {
         GuangYuYunClient client = new GuangYuYunClient();
         
         try {
-            String account = "1754363080";
-            String apiKey = "ec4c5377c660b9a86f3a59a1a80cf00f";
+            String account = "1753753200";
+            String apiKey = "d926e23586984e3b8b52c3911427ff15";
             Long expireTime = System.currentTimeMillis() / 1000 + 7200; // 10位时间戳，2小时后过期
             
             TokenResponse response = client.createToken(account, apiKey, expireTime);
